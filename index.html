@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Sunrise</title>
+
+    <style>
+      * {
+        background-color: black;
+        color: white;
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        display: flex;
+        justify-content: center;
+        text-align: center;
+        flex-direction: row;
+        width: 100vw;
+        height: 90vh;
+        align-items: center;
+      }
+
+      main {
+        display: flex;
+        align-items: stretch;
+        flex-direction: column;
+        flex-grow:1;
+        max-width:80vw;
+        max-height:80vh;
+      }
+
+      #controls {
+        flex-shrink: 0;
+        flex-grow: 0;
+      }
+
+      @media (min-aspect-ratio: 17/12) {
+        main {
+          flex-direction: row;
+          justify-content: center;
+        }
+        main>*{
+          padding: 0 2vw;
+        }
+
+        #controls, #warning {
+          align-self: center;
+        }
+      }
+
+
+    </style>
+  </head>
+
+  <body>
+    <main>
+      <div id="controls">
+        <input type="button" id="start_button" value="Start" />
+        &nbsp; &nbsp;
+        <input type="button" id="stop_button" value="Stop" disabled />
+        <br><br>
+
+        <!-- For testing -->
+        <!-- <output id="msg"></output>
+        <br><br>
+        <div id="timestamp"></div> -->
+      </div>
+      <canvas id="canvas" height="600" width="800"></canvas>
+      <div id="warning">Warning:<br>the following animation features slight strobe effects</div>
+    </main>
+
+    <script>
+      // Useful UI elements
+      const msg = document.querySelector("output");
+      const startBtn = document.querySelector("#start_button");
+      const stopBtn = document.querySelector("#stop_button");
+      const canvasElt = document.querySelector("#canvas");
+      let time = 0;
+      let audioContext;
+      let decodedBuffer;
+
+      // When the _Start_ button is clicked, set up the audio nodes, play the sound,
+      // gather samples for the analysis, update the canvas.
+      const start = (e,startTime=0) => {
+        if (e) e.preventDefault();
+        if (startTime===0) time=0;
+        startBtn.disabled = true;
+
+        // A user interaction happened we can create the audioContext
+        const audioContext = new AudioContext();
+
+        const activate = ()=> {
+          if (msg) msg.textContent = "Configuring audio stack…";
+
+          // Set up the AudioBufferSourceNode
+          const sourceNode = new AudioBufferSourceNode(audioContext, {
+            buffer: decodedBuffer,
+            loop: true,
+          });
+
+          // Set up the audio analyser and the javascript node
+          const analyserNode = new AnalyserNode(audioContext);
+          const javascriptNode = audioContext.createScriptProcessor(
+            1024,
+            1,
+            1
+          );
+
+          // Connect the nodes together
+          sourceNode.connect(audioContext.destination);
+          sourceNode.connect(analyserNode);
+          analyserNode.connect(javascriptNode);
+          javascriptNode.connect(audioContext.destination);
+
+          // Play the audio
+          if (msg) msg.textContent = "Audio playing…";
+          sourceNode.start(0,startTime); // Play the sound now
+
+          const stop = (e,jumpTo) => {
+            if (e) e.preventDefault();
+            if (!jumpTo) {
+              startBtn.disabled = false;
+              stopBtn.disabled = true;
+            }
+            sourceNode.stop(0);
+            if (msg) msg.textContent = "Audio stopped.";
+            javascriptNode.onaudioprocess = () => {};
+            if (jumpTo) {
+              setTimeout(start, 0, null, jumpTo);
+            }
+          }
+
+          // Set up the event handler that is triggered every time enough samples have been collected
+          // then trigger the audio analysis and draw the results
+          javascriptNode.onaudioprocess = () => {
+
+            analyserNode.fftSize = 2048;
+
+            // Read the frequency values
+            let amplitudeArray = new Uint8Array(
+              analyserNode.frequencyBinCount
+            );
+
+            // Get the time domain data for this sample
+            analyserNode.getByteTimeDomainData(amplitudeArray);
+
+            const playPosition = audioContext.currentTime + startTime;
+
+            time = Math.max(playPosition,time);
+
+            // Draw the display when the audio is playing
+            if (audioContext.state === "running") {
+              if (playPosition>54) {
+                stop(null,52.1);
+              } else {
+                // Draw the time domain in the canvas
+                requestAnimationFrame(() => {
+                  
+                  const canvasCtx = canvasElt.getContext("2d");
+                  canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+                  const horizon = canvas.height / 2 ;
+
+                  const gradient = canvasCtx.createRadialGradient((canvas.width*1.0)/2, (canvas.height*0.9)-(time*canvas.height/90), (canvas.height*1.0)/4, (canvas.width*1.0)/2, (canvas.height*0.9)-(time*canvas.height/90), ((canvas.height*1.0)/4)+(time*canvas.height/200));
+                  gradient.addColorStop(0, "yellow");
+                  gradient.addColorStop(1, "hsl("+(-150+(time*6))+" 100% "+(5+(time*1.4))+"%)");
+                
+                  canvasCtx.fillStyle = gradient;
+                  canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+                  const gradient2 = canvasCtx.createLinearGradient(0, 0, 0, canvas.height);
+                  gradient2.addColorStop(0.3, "hsl("+(-150+(time*6))+" 100% "+(5+(time*1.4))+"%)");
+                  gradient2.addColorStop(1, "black");
+                  
+                  canvasCtx.fillStyle = gradient2;
+
+                  canvasCtx.lineWidth = 2;
+                  canvasCtx.strokeStyle = "black";
+
+                  canvasCtx.beginPath();
+
+                  const sliceWidth = (canvas.width * 1.0) / amplitudeArray.length;
+                  let x = 0;
+
+                  for (let i = 0; i < amplitudeArray.length; i++) {
+                    let v = (amplitudeArray[i] / 128.0);
+                    let y = (canvas.height * 0) + (v * canvas.height) / 2;
+
+                    if (i === 0) {
+                      canvasCtx.moveTo(x, y);
+                    } else {
+                      canvasCtx.lineTo(x, y);
+                    }
+
+                    x += sliceWidth;
+                  }
+
+                  canvasCtx.lineTo(canvas.width, horizon);
+                  // canvasCtx.stroke();
+
+                  canvasCtx.lineTo(canvas.width + 10, horizon);
+                  canvasCtx.lineTo(canvas.width + 10, canvas.height + 10);
+                  canvasCtx.lineTo(-10, canvas.height + 10);
+                  canvasCtx.lineTo(-10, horizon);
+
+                  canvasCtx.fill();
+
+
+                  const timestampDiv = document.getElementById("timestamp");
+
+                  if (timestampDiv)
+                    timestampDiv.innerHTML = `${time}<br>(${audioContext.currentTime})`;
+                });
+                
+              }
+
+            }
+          };
+
+          // Set up the event handler to stop playing the audio
+          stopBtn.addEventListener("click",stop);
+          stopBtn.disabled = false;
+
+        }
+        
+        if(!decodedBuffer) {
+          // Load the audio the first time through, otherwise play it from the buffer
+          if (msg) msg.textContent = "Loading audio…";
+          
+          fetch("sunrise.wav")
+            .then((response) => response.arrayBuffer())
+            .then((downloadedBuffer) =>
+              audioContext.decodeAudioData(downloadedBuffer)
+            )
+            .then((_decodedBuffer) => {
+              decodedBuffer= _decodedBuffer
+              activate();
+            })
+            .catch((e) => {
+              console.error(`Error: ${e}`);
+            });
+        } else {
+          activate();
+        }
+
+      };
+
+      // Set up the event handler to start playing the audio
+      startBtn.addEventListener("click", start);
+
+      
+    </script>
+
+  </body>
+</html>

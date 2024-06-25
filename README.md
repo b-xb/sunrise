@@ -1,4 +1,4 @@
-![preview image](preview.png?raw=true)
+<img src="preview.png?raw=true" width="50%">
 
 # Demo
 

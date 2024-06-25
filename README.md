@@ -1,3 +1,5 @@
+![preview image](preview.png?raw=true)
+
 # Demo
 
 https://b-xb.github.io/sunrise/

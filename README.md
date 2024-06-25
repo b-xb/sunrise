@@ -1,6 +1,6 @@
-<img src="preview.png?raw=true" width="50%">
-
 # Demo
+
+<a href="https://b-xb.github.io/sunrise/"><img src="preview.png?raw=true" width="50%"></a>
 
 https://b-xb.github.io/sunrise/
 
